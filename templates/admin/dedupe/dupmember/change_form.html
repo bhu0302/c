@@ -1,0 +1,42 @@
+{% extends "admin/change_form.html" %}
+
+{% block after_related_objects %}
+  {{ block.super }}
+
+  {% if dup_pie_chart %}
+    <div style="margin-top:20px; padding:16px; border:1px solid #ddd; border-radius:10px;">
+      <h2 style="margin-top:0;">Duplicate Group Score Pie Chart</h2>
+      <p><small>Retained BP slice is highlighted (popped out).</small></p>
+
+      <img
+        src="data:image/png;base64,{{ dup_pie_chart }}"
+        style="max-width:100%; height:auto; border:1px solid #eee; border-radius:8px;"
+        alt="Duplicate Group Pie Chart"
+      />
+
+      {% if group_members %}
+        <h3 style="margin-top:16px;">Members (Sorted by Score)</h3>
+        <table style="width:100%; border-collapse:collapse;">
+          <thead>
+            <tr>
+              <th style="text-align:left; border-bottom:1px solid #ccc; padding:6px;">BP</th>
+              <th style="text-align:left; border-bottom:1px solid #ccc; padding:6px;">Score</th>
+              <th style="text-align:left; border-bottom:1px solid #ccc; padding:6px;">Retained</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for m in group_members %}
+              <tr>
+                <td style="padding:6px; border-bottom:1px solid #eee;">{{ m.bp_id }}</td>
+                <td style="padding:6px; border-bottom:1px solid #eee;">{{ m.score_total }}</td>
+                <td style="padding:6px; border-bottom:1px solid #eee;">
+                  {% if m.retain_candidate %}✅{% else %}-{% endif %}
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      {% endif %}
+    </div>
+  {% endif %}
+{% endblock %}

@@ -1,0 +1,101 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Group {{ group.id }}</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 20px; }
+    .muted { color: #666; }
+    .grid { display: grid; grid-template-columns: 1.2fr 1fr; gap: 16px; margin-top: 12px; }
+    .card { border: 1px solid #ddd; border-radius: 10px; padding: 12px; }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { padding: 8px; border-bottom: 1px solid #eee; text-align: left; vertical-align: top; }
+    .ok { font-weight: 700; }
+    details { margin-top: 6px; }
+    .kv { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-top: 6px; }
+    .kv div { padding: 6px; border: 1px solid #eee; border-radius: 8px; }
+    .kv .k { font-weight: 700; }
+  </style>
+</head>
+<body>
+  <h2>Duplicate Group #{{ group.id }}</h2>
+  <p class="muted">
+    <a href="/dashboard/groups/">← Back to groups</a> |
+    <a href="/dashboard/">Dashboard</a>
+  </p>
+
+  <div class="card">
+    <div><b>ID Type:</b> {{ group.id_type }}</div>
+    <div><b>ID Number:</b> {{ group.id_number }}</div>
+    <div><b>Duplicate BPs:</b> {{ group.dup_count }}</div>
+    <div><b>Retained BP:</b> {% if retained %}<span class="ok">{{ retained.bp_id }}</span>{% else %}-{% endif %}</div>
+  </div>
+
+  <div class="grid">
+    <div class="card">
+      <h3>Members (sorted by total score)</h3>
+
+      <table>
+        <thead>
+          <tr>
+            <th>BP</th>
+            <th>Total Score</th>
+            <th>Retained</th>
+            <th>Score Breakdown (JSON)</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for m in members %}
+            <tr>
+              <td>{{ m.bp_id }}</td>
+              <td>{{ m.score_total }}</td>
+              <td>{% if m.retain_candidate %}✅{% else %}-{% endif %}</td>
+              <td>
+                <details {% if m.retain_candidate %}open{% endif %}>
+                  <summary>View score details</summary>
+                  {% if m.reasons_pretty %}
+                    <div class="kv">
+                      {% for k,v in m.reasons_pretty %}
+                        <div class="k">{{ k }}</div>
+                        <div>{{ v }}</div>
+                      {% endfor %}
+                    </div>
+                  {% else %}
+                    <div class="muted">No reasons_json stored.</div>
+                  {% endif %}
+                </details>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    <div class="card">
+      <h3>Score pie chart</h3>
+      <p class="muted">Retained BP slice is highlighted.</p>
+      <canvas id="pie"></canvas>
+    </div>
+  </div>
+
+  <script>
+    const labels = {{ labels|safe }};
+    const values = {{ values|safe }};
+    const retainedIndex = {{ retained_index }};
+
+    const offsets = labels.map((_, i) => (i === retainedIndex ? 20 : 0));
+
+    new Chart(document.getElementById("pie"), {
+      type: "pie",
+      data: {
+        labels: labels,
+        datasets: [{
+          data: values.map(v => (v === 0 ? 0.01 : v)),
+          offset: offsets
+        }]
+      }
+    });
+  </script>
+</body>
+</html>

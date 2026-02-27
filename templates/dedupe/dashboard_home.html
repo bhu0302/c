@@ -1,0 +1,76 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Duplicate Reconciliation Dashboard</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 20px; }
+    .cards { display: grid; grid-template-columns: repeat(4, minmax(180px, 1fr)); gap: 12px; }
+    .card { border: 1px solid #ddd; border-radius: 10px; padding: 12px; }
+    .big { font-size: 26px; font-weight: 700; }
+    .muted { color: #666; }
+    .row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 16px; }
+    a { text-decoration: none; }
+  </style>
+</head>
+<body>
+  <h2>Duplicate Reconciliation Dashboard</h2>
+  <p class="muted">Read-only view (no admin login required).</p>
+
+  <div class="cards">
+    <div class="card">
+      <div class="muted">Total BPs (Staging)</div>
+      <div class="big">{{ total_bps }}</div>
+    </div>
+    <div class="card">
+      <div class="muted">Duplicate BPs</div>
+      <div class="big">{{ duplicate_bps }}</div>
+    </div>
+    <div class="card">
+      <div class="muted">Unique BPs</div>
+      <div class="big">{{ unique_bps }}</div>
+    </div>
+    <div class="card">
+      <div class="muted">Duplicate Groups</div>
+      <div class="big">{{ dup_group_count }}</div>
+    </div>
+  </div>
+
+  <div class="row">
+    <div class="card">
+      <h3>Duplicate vs Unique</h3>
+      <canvas id="pie1"></canvas>
+    </div>
+    <div class="card">
+      <h3>Counts</h3>
+      <canvas id="bar1"></canvas>
+      <p style="margin-top:10px;">
+        <a href="/dashboard/groups/">➡ View duplicate groups</a>
+      </p>
+    </div>
+  </div>
+
+  <script>
+    const duplicateBps = {{ duplicate_bps|default:0 }};
+    const uniqueBps = {{ unique_bps|default:0 }};
+    const totalBps = {{ total_bps|default:0 }};
+
+    new Chart(document.getElementById("pie1"), {
+      type: "pie",
+      data: {
+        labels: ["Duplicate BPs", "Unique BPs"],
+        datasets: [{ data: [duplicateBps, uniqueBps] }]
+      }
+    });
+
+    new Chart(document.getElementById("bar1"), {
+      type: "bar",
+      data: {
+        labels: ["Total", "Duplicate", "Unique"],
+        datasets: [{ data: [totalBps, duplicateBps, uniqueBps] }]
+      }
+    });
+  </script>
+</body>
+</html>

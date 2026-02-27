@@ -1,0 +1,60 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Duplicate Groups</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 20px; }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { padding: 8px; border-bottom: 1px solid #eee; text-align: left; }
+    .muted { color: #666; }
+    .pager a { margin-right: 10px; }
+    input { padding: 6px; width: 260px; }
+    button { padding: 6px 10px; }
+  </style>
+</head>
+<body>
+  <h2>Duplicate Groups</h2>
+  <p class="muted"><a href="/dashboard/">← Back to dashboard</a></p>
+
+  <form method="get">
+    <input name="q" value="{{ q }}" placeholder="Search by ID type/number" />
+    <button type="submit">Search</button>
+  </form>
+
+  <table>
+    <thead>
+      <tr>
+        <th>Group ID</th>
+        <th>ID Type</th>
+        <th>ID Number</th>
+        <th>Duplicate Count</th>
+        <th>Open</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for g in page_obj %}
+      <tr>
+        <td>{{ g.id }}</td>
+        <td>{{ g.id_type }}</td>
+        <td>{{ g.id_number }}</td>
+        <td>{{ g.dup_count }}</td>
+        <td><a href="/dashboard/groups/{{ g.id }}/">View</a></td>
+      </tr>
+      {% empty %}
+      <tr><td colspan="5">No groups found.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  <div class="pager" style="margin-top:12px;">
+    {% if page_obj.has_previous %}
+      <a href="?q={{ q }}&page={{ page_obj.previous_page_number }}">Prev</a>
+    {% endif %}
+    <span>Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
+    {% if page_obj.has_next %}
+      <a href="?q={{ q }}&page={{ page_obj.next_page_number }}">Next</a>
+    {% endif %}
+  </div>
+</body>
+</html>
