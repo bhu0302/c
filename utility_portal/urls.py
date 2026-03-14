@@ -1,6 +1,16 @@
 from django.contrib import admin
 from django.urls import path, include
+from django.http import HttpResponse
 
+def home(request):
+    return HttpResponse('Utility Portal is running ✅ <br><a href="/dashboard/">Open Dashboard</a>')
+
+urlpatterns = [
+    path("", home, name="home"),
+    path("admin/", admin.site.urls),
+    path("", include("ingestion.urls")),
+    path("", include("dedupe.urls")),
+]
 
 admin.site.site_header = "Utility Data Cleansing Portal"
 admin.site.site_title = "Utility Admin"

@@ -46,7 +46,7 @@
       <h3>Counts</h3>
       <canvas id="bar1"></canvas>
       <p style="margin-top:10px;">
-        <a href="/dashboard/groups/">➡ View duplicate groups</a>
+        <a href="{% url 'duplicate_groups' %}">➡ View duplicate groups</a>
       </p>
     </div>
   </div>
