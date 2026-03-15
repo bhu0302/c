@@ -6,7 +6,7 @@ import json
 
 from .models import DupGroup, DupMember, PushCleansedData
 from .utils import build_push_json_for_group
-
+from django.contrib import admin
 
 def _read_score_data(obj):
     """
@@ -182,7 +182,9 @@ def push_selected_groups(modeladmin, request, queryset):
             level=messages.WARNING,
         )
 
-
+       
+        
+        
 @admin.register(DupGroup)
 class DupGroupAdmin(admin.ModelAdmin):
     list_display = (
@@ -334,3 +336,19 @@ class PushCleansedDataAdmin(admin.ModelAdmin):
             self.message_user(request, f"Push failed: {str(e)}", messages.ERROR)
 
         return HttpResponseRedirect(f"/admin/dedupe/pushcleanseddata/{obj.pk}/change/")
+    
+    def admin_index_with_dashboard(request, extra_context=None):
+    extra_context = extra_context or {}
+    extra_context["dashboard_url"] = "/dashboard/"
+    return admin.site.index(request, extra_context=extra_context)
+
+from django.contrib import admin
+
+    original_each_context = admin.site.each_context
+
+    def custom_each_context(request):
+    context = original_each_context(request)
+    context["dashboard_url"] = "/dashboard/"
+    return context
+
+    admin.site.each_context = custom_each_context
