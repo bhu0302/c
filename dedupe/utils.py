@@ -1,39 +1,34 @@
-def build_push_json_for_dup_member(dup_member):
-    """
-    Build JSON payload for target system push.
-    Assumptions:
-    - dup_member has related duplicate BP records
-    - one record is marked retained = True
-    - non-retained records may have installation numbers
-    """
+from .models import DupMember
 
-    all_records = dup_member.records.all()   # change as per your related name
-    retained = all_records.filter(is_retained=True).first()
+
+def build_push_json_for_group(dup_group):
+    members = DupMember.objects.filter(group=dup_group).order_by("-retain_candidate", "-score_total")
+
+    retained = members.filter(retain_candidate=True).first()
+    if not retained:
+        retained = members.first()
 
     if not retained:
         return {
-            "dup_member_id": dup_member.id,
-            "error": "No retained BP found"
+            "dup_group_id": dup_group.id,
+            "error": "No members found"
         }
 
-    non_retained = all_records.filter(is_retained=False)
+    non_retained = members.exclude(id=retained.id)
 
     payload = {
-        "dup_member_id": dup_member.id,
-        "retained_bp": retained.bp_number,
-        "retained_account": getattr(retained, "contract_account", None),
-        "non_retained_records": []
+        "dup_group_id": dup_group.id,
+        "id_type": dup_group.id_type,
+        "id_number": dup_group.id_number,
+        "retained_bp": retained.bp_id,
+        "non_retained_entities": []
     }
 
-    for rec in non_retained:
-        payload["non_retained_records"].append({
-            "bp_id": rec.bp_number,
-            "installation": getattr(rec, "installation_number", None),
-            "existing_account": getattr(rec, "contract_account", None),
-            "target_action": (
-                "Create new contract account, create contract, "
-                "link non-retained installation, then allow BP merge / financial transfer"
-            )
+    for m in non_retained:
+        payload["non_retained_entities"].append({
+            "bp_id": m.bp_id,
+            "installation": getattr(m, "installation_no", None),
+            "target_action": "CREATE_CA_CONTRACT_AND_RELINK"
         })
 
     return payload
