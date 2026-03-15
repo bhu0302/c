@@ -18,6 +18,8 @@ class DupMemberAdmin(admin.ModelAdmin):
     change_form_template = "admin/dedupe/dupmember/change_form.html"
 
     def _make_pie_chart_base64(self, obj: DupMember) -> str:
+        import matplotlib
+        matplotlib.use("Agg")
         import matplotlib.pyplot as plt
 
         members = list(
