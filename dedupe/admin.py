@@ -29,18 +29,31 @@ class DupMemberInline(admin.TabularInline):
     )
 
     def score_summary(self, obj):
-        data = getattr(obj, "score_breakdown", {}) or {}
-        return format_html(
-            "AI:{} | C:{} | M:{} | O:{} | P:{} | A:{} | F:{}",
-            data.get("active_installation", 0),
-            data.get("contract_score", 0),
-            data.get("recent_movein", 0),
-            data.get("oldest_bp_bonus", 0),
-            data.get("profile_completeness", 0),
-            data.get("address_consistency", 0),
-            data.get("financial_score", 0),
-        )
-    score_summary.short_description = "Score Breakdown"
+    data = {}
+
+    # replace score_breakdown with your actual field name if needed
+    raw = getattr(obj, "score_breakdown", None)
+
+    if isinstance(raw, dict):
+        data = raw
+    elif isinstance(raw, str) and raw.strip():
+        try:
+            data = json.loads(raw)
+        except Exception:
+            data = {}
+
+    ai = data.get("active_installation", data.get("active_inst", 0))
+    contract = data.get("contract_score", data.get("contract", 0))
+    movein = data.get("recent_movein", data.get("movein", 0))
+    oldest = data.get("oldest_bp_bonus", data.get("oldest_bp", 0))
+    profile = data.get("profile_completeness", data.get("profile", 0))
+    address = data.get("address_consistency", data.get("address", 0))
+    financial = data.get("financial_score", data.get("financial", 0))
+
+    return format_html(
+        "AI:{} | C:{} | M:{} | O:{} | P:{} | A:{} | F:{}",
+        ai, contract, movein, oldest, profile, address, financial
+    )
 
 
 @admin.action(description="Prepare Push Data for selected groups")
@@ -158,18 +171,31 @@ class DupMemberAdmin(admin.ModelAdmin):
     search_fields = ("bp_id", "group__id_number", "group__id_type")
 
     def score_summary(self, obj):
-        data = getattr(obj, "score_breakdown", {}) or {}
-        return format_html(
-            "AI:{} | C:{} | M:{} | O:{} | P:{} | A:{} | F:{}",
-            data.get("active_installation", 0),
-            data.get("contract_score", 0),
-            data.get("recent_movein", 0),
-            data.get("oldest_bp_bonus", 0),
-            data.get("profile_completeness", 0),
-            data.get("address_consistency", 0),
-            data.get("financial_score", 0),
-        )
-    score_summary.short_description = "Score Breakdown"
+    data = {}
+
+    # replace score_breakdown with your actual field name if needed
+    raw = getattr(obj, "score_breakdown", None)
+
+    if isinstance(raw, dict):
+        data = raw
+    elif isinstance(raw, str) and raw.strip():
+        try:
+            data = json.loads(raw)
+        except Exception:
+            data = {}
+
+    ai = data.get("active_installation", data.get("active_inst", 0))
+    contract = data.get("contract_score", data.get("contract", 0))
+    movein = data.get("recent_movein", data.get("movein", 0))
+    oldest = data.get("oldest_bp_bonus", data.get("oldest_bp", 0))
+    profile = data.get("profile_completeness", data.get("profile", 0))
+    address = data.get("address_consistency", data.get("address", 0))
+    financial = data.get("financial_score", data.get("financial", 0))
+
+    return format_html(
+        "AI:{} | C:{} | M:{} | O:{} | P:{} | A:{} | F:{}",
+        ai, contract, movein, oldest, profile, address, financial
+    )
 
 
 @admin.action(description="Push selected records")
