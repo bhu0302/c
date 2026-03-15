@@ -7,6 +7,28 @@ import json
 from .models import DupGroup, DupMember, PushCleansedData
 from .utils import build_push_json_for_group
 
+class DupMemberInline(admin.TabularInline):
+    model = DupMember
+    extra = 0
+    fields = ("bp_id", "score_total", "retain_candidate", "score_summary")
+    readonly_fields = ("bp_id", "score_total", "retain_candidate", "score_summary")
+    can_delete = False
+    show_change_link = True
+
+    def score_summary(self, obj):
+        data = obj.score_breakdown or {}
+        return format_html(
+            "AI:{} | C:{} | M:{} | O:{} | P:{} | A:{} | F:{}",
+            data.get("active_installation", 0),
+            data.get("contract_score", 0),
+            data.get("recent_movein", 0),
+            data.get("oldest_bp_bonus", 0),
+            data.get("profile_completeness", 0),
+            data.get("address_consistency", 0),
+            data.get("financial_score", 0),
+        )
+    score_summary.short_description = "Breakdown"
+    
 
 @admin.action(description="Prepare Push Data for selected groups")
 def prepare_push_data(modeladmin, request, queryset):
@@ -123,7 +145,7 @@ class DupGroupAdmin(admin.ModelAdmin):
         "push_data_link",
     )
     actions = [prepare_push_data, push_selected_groups]
-
+    inlines = [DupMemberInline]
     def push_data_link(self, obj):
         if hasattr(obj, "push_data"):
             return format_html(
@@ -136,9 +158,29 @@ class DupGroupAdmin(admin.ModelAdmin):
 
 @admin.register(DupMember)
 class DupMemberAdmin(admin.ModelAdmin):
-    list_display = ("group", "bp_id", "score_total", "retain_candidate")
+    list_display = ("group", "bp_id", "score_total", "score_band", "retain_candidate")
     list_filter = ("retain_candidate", "group__id_type")
     search_fields = ("bp_id", "group__id_number", "group__id_type")
+
+    def score_band(self, obj):
+        score = obj.score_total or 0
+        if score >= 80:
+            color = "#28a745"
+            label = "High"
+        elif score >= 50:
+            color = "#ffc107"
+            label = "Medium"
+        else:
+            color = "#dc3545"
+            label = "Low"
+
+        return format_html(
+            '<span style="padding:4px 8px; border-radius:10px; background:{}; color:white;">{} ({})</span>',
+            color,
+            label,
+            score
+        )
+    score_band.short_description = "Score Band"
 
 
 @admin.action(description="Push selected records")
