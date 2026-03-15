@@ -1,5 +1,4 @@
 from django.contrib import admin, messages
-from django.utils import timezone
 from django.utils.html import format_html
 from django.urls import path
 from django.http import HttpResponseRedirect
@@ -18,16 +17,13 @@ def prepare_push_data(modeladmin, request, queryset):
         try:
             payload = build_push_json_for_group(group)
 
-            retained_bp = payload.get("retained_bp")
-
             PushCleansedData.objects.update_or_create(
                 dup_group=group,
                 defaults={
-                    "retained_bp": retained_bp,
+                    "retained_bp": payload.get("retained_bp"),
                     "retained_account": None,
                     "payload_json": payload,
                     "status": "READY",
-                    "push_message": ""
                 }
             )
             count += 1
@@ -44,7 +40,6 @@ def prepare_push_data(modeladmin, request, queryset):
                         "error": str(e)
                     },
                     "status": "ERROR",
-                    "push_message": str(e)
                 }
             )
 
@@ -78,21 +73,11 @@ def push_selected_groups(modeladmin, request, queryset):
                     "retained_account": None,
                     "payload_json": payload,
                     "status": "READY",
-                    "push_message": ""
                 }
             )
 
-            # ---------------------------------------------------
-            # TODO: Replace this block with actual target push call
-            # Example:
-            # response = requests.post(TARGET_URL, json=payload, timeout=30)
-            # if response.status_code != 200:
-            #     raise Exception(response.text)
-            # ---------------------------------------------------
-
+            # TODO: replace with actual API push
             obj.status = "PUSHED"
-            obj.push_message = "Pushed successfully"
-            obj.pushed_at = timezone.now()
             obj.save()
 
             success_count += 1
@@ -110,7 +95,6 @@ def push_selected_groups(modeladmin, request, queryset):
                         "error": str(e)
                     },
                     "status": "ERROR",
-                    "push_message": str(e)
                 }
             )
 
@@ -166,24 +150,14 @@ def push_selected_records(modeladmin, request, queryset):
         try:
             payload = obj.payload_json
 
-            # ---------------------------------------------------
-            # TODO: Replace this block with actual target push call
-            # Example:
-            # response = requests.post(TARGET_URL, json=payload, timeout=30)
-            # if response.status_code != 200:
-            #     raise Exception(response.text)
-            # ---------------------------------------------------
-
+            # TODO: replace with actual API push
             obj.status = "PUSHED"
-            obj.push_message = "Pushed successfully"
-            obj.pushed_at = timezone.now()
             obj.save()
 
             success_count += 1
 
         except Exception as e:
             obj.status = "ERROR"
-            obj.push_message = str(e)
             obj.save()
             error_count += 1
 
@@ -209,10 +183,9 @@ class PushCleansedDataAdmin(admin.ModelAdmin):
         "retained_account",
         "status",
         "created_at",
-        "pushed_at",
         "push_now_button",
     )
-    list_filter = ("status", "created_at", "pushed_at")
+    list_filter = ("status", "created_at")
     search_fields = (
         "retained_bp",
         "retained_account",
@@ -227,8 +200,6 @@ class PushCleansedDataAdmin(admin.ModelAdmin):
         "retained_account",
         "payload_pretty",
         "created_at",
-        "updated_at",
-        "pushed_at",
         "push_now_button",
     )
 
@@ -237,13 +208,10 @@ class PushCleansedDataAdmin(admin.ModelAdmin):
         "retained_bp",
         "retained_account",
         "status",
-        "push_message",
         "payload_json",
         "payload_pretty",
         "push_now_button",
         "created_at",
-        "updated_at",
-        "pushed_at",
     )
 
     def payload_pretty(self, obj):
@@ -279,24 +247,14 @@ class PushCleansedDataAdmin(admin.ModelAdmin):
         try:
             payload = obj.payload_json
 
-            # ---------------------------------------------------
-            # TODO: Replace this block with actual target push call
-            # Example:
-            # response = requests.post(TARGET_URL, json=payload, timeout=30)
-            # if response.status_code != 200:
-            #     raise Exception(response.text)
-            # ---------------------------------------------------
-
+            # TODO: replace with actual API push
             obj.status = "PUSHED"
-            obj.push_message = "Pushed successfully"
-            obj.pushed_at = timezone.now()
             obj.save()
 
             self.message_user(request, "Record pushed successfully.", messages.SUCCESS)
 
         except Exception as e:
             obj.status = "ERROR"
-            obj.push_message = str(e)
             obj.save()
 
             self.message_user(request, f"Push failed: {str(e)}", messages.ERROR)

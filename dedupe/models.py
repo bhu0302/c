@@ -25,6 +25,9 @@ class PushCleansedData(models.Model):
     dup_member_id = models.IntegerField()
     retained_bp = models.CharField(max_length=50)
     retained_account = models.CharField(max_length=50, blank=True, null=True)
+    push_message = models.TextField(blank=True, null=True)
+    pushed_at = models.DateTimeField(blank=True, null=True)
+    updated_at = models.DateTimeField(auto_now=True)
     payload_json = models.JSONField()
     status = models.CharField(
         max_length=20,
@@ -40,3 +43,5 @@ class PushCleansedData(models.Model):
 
     def __str__(self):
         return f"Push Payload - DupMember {self.dup_member_id} - {self.status}"
+    
+
