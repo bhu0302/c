@@ -8,6 +8,53 @@ from .models import DupGroup, DupMember, PushCleansedData
 from .utils import build_push_json_for_group
 
 
+def _read_score_data(obj):
+    """
+    Safely read score breakdown from DupMember.
+    Change the field list below if your actual score JSON field has another name.
+    """
+    possible_fields = [
+        "score_breakdown",
+        "score_details",
+        "score_json",
+        "scores",
+        "score_components",
+    ]
+
+    raw = None
+    for field in possible_fields:
+        if hasattr(obj, field):
+            raw = getattr(obj, field, None)
+            if raw not in (None, "", {}):
+                break
+
+    if isinstance(raw, dict):
+        return raw
+
+    if isinstance(raw, str) and raw.strip():
+        try:
+            return json.loads(raw)
+        except Exception:
+            return {}
+
+    return {}
+
+
+def _score_summary_html(obj):
+    data = _read_score_data(obj)
+
+    return format_html(
+        "AI:{} | C:{} | M:{} | O:{} | P:{} | A:{} | F:{}",
+        data.get("active_installation", 0),
+        data.get("contract_score", 0),
+        data.get("recent_movein", 0),
+        data.get("oldest_bp_bonus", 0),
+        data.get("profile_completeness", 0),
+        data.get("address_consistency", 0),
+        data.get("financial_score", 0),
+    )
+
+
 class DupMemberInline(admin.TabularInline):
     model = DupMember
     extra = 0
@@ -29,37 +76,14 @@ class DupMemberInline(admin.TabularInline):
     )
 
     def score_summary(self, obj):
-    data = {}
-
-    # replace score_breakdown with your actual field name if needed
-    raw = getattr(obj, "score_breakdown", None)
-
-    if isinstance(raw, dict):
-        data = raw
-    elif isinstance(raw, str) and raw.strip():
-        try:
-            data = json.loads(raw)
-        except Exception:
-            data = {}
-
-    ai = data.get("active_installation", data.get("active_inst", 0))
-    contract = data.get("contract_score", data.get("contract", 0))
-    movein = data.get("recent_movein", data.get("movein", 0))
-    oldest = data.get("oldest_bp_bonus", data.get("oldest_bp", 0))
-    profile = data.get("profile_completeness", data.get("profile", 0))
-    address = data.get("address_consistency", data.get("address", 0))
-    financial = data.get("financial_score", data.get("financial", 0))
-
-    return format_html(
-        "AI:{} | C:{} | M:{} | O:{} | P:{} | A:{} | F:{}",
-        ai, contract, movein, oldest, profile, address, financial
-    )
+        return _score_summary_html(obj)
+    score_summary.short_description = "Score Breakdown"
 
 
 @admin.action(description="Prepare Push Data for selected groups")
 def prepare_push_data(modeladmin, request, queryset):
-    count = 0
-    error_count = 0
+    prepared = 0
+    failed = 0
 
     for group in queryset:
         try:
@@ -69,15 +93,15 @@ def prepare_push_data(modeladmin, request, queryset):
                 dup_group=group,
                 defaults={
                     "retained_bp": payload.get("retained_bp"),
-                    "retained_account": None,
+                    "retained_account": payload.get("retained_account"),
                     "payload_json": payload,
                     "status": "READY",
                 }
             )
-            count += 1
+            prepared += 1
 
         except Exception as e:
-            error_count += 1
+            failed += 1
             PushCleansedData.objects.update_or_create(
                 dup_group=group,
                 defaults={
@@ -85,43 +109,53 @@ def prepare_push_data(modeladmin, request, queryset):
                     "retained_account": None,
                     "payload_json": {
                         "dup_group_id": group.id,
-                        "error": str(e)
+                        "error": str(e),
                     },
                     "status": "ERROR",
                 }
             )
 
-    if error_count == 0:
-        modeladmin.message_user(request, f"{count} selected group(s) prepared successfully.", level=messages.SUCCESS)
+    if failed == 0:
+        modeladmin.message_user(
+            request,
+            f"{prepared} selected group(s) prepared successfully.",
+            level=messages.SUCCESS,
+        )
     else:
-        modeladmin.message_user(request, f"{count} prepared, {error_count} failed.", level=messages.WARNING)
+        modeladmin.message_user(
+            request,
+            f"{prepared} prepared, {failed} failed.",
+            level=messages.WARNING,
+        )
 
 
 @admin.action(description="Push selected groups to target")
 def push_selected_groups(modeladmin, request, queryset):
-    success_count = 0
-    error_count = 0
+    pushed = 0
+    failed = 0
 
     for group in queryset:
         try:
             payload = build_push_json_for_group(group)
 
-            obj, created = PushCleansedData.objects.update_or_create(
+            obj, _ = PushCleansedData.objects.update_or_create(
                 dup_group=group,
                 defaults={
                     "retained_bp": payload.get("retained_bp"),
-                    "retained_account": None,
+                    "retained_account": payload.get("retained_account"),
                     "payload_json": payload,
                     "status": "READY",
                 }
             )
 
+            # Replace this with real target push later
             obj.status = "PUSHED"
             obj.save()
-            success_count += 1
+
+            pushed += 1
 
         except Exception as e:
-            error_count += 1
+            failed += 1
             PushCleansedData.objects.update_or_create(
                 dup_group=group,
                 defaults={
@@ -129,16 +163,24 @@ def push_selected_groups(modeladmin, request, queryset):
                     "retained_account": None,
                     "payload_json": {
                         "dup_group_id": group.id,
-                        "error": str(e)
+                        "error": str(e),
                     },
                     "status": "ERROR",
                 }
             )
 
-    if error_count == 0:
-        modeladmin.message_user(request, f"{success_count} selected group(s) pushed successfully.", level=messages.SUCCESS)
+    if failed == 0:
+        modeladmin.message_user(
+            request,
+            f"{pushed} selected group(s) pushed successfully.",
+            level=messages.SUCCESS,
+        )
     else:
-        modeladmin.message_user(request, f"{success_count} pushed, {error_count} failed.", level=messages.WARNING)
+        modeladmin.message_user(
+            request,
+            f"{pushed} pushed, {failed} failed.",
+            level=messages.WARNING,
+        )
 
 
 @admin.register(DupGroup)
@@ -155,68 +197,62 @@ class DupGroupAdmin(admin.ModelAdmin):
     inlines = [DupMemberInline]
 
     def push_data_link(self, obj):
-        if hasattr(obj, "push_data"):
-            return format_html(
-                '<a href="/admin/dedupe/pushcleanseddata/{}/change/">View Push Data</a>',
-                obj.push_data.id
-            )
+        try:
+            if hasattr(obj, "push_data") and obj.push_data:
+                return format_html(
+                    '<a href="/admin/dedupe/pushcleanseddata/{}/change/">View Push Data</a>',
+                    obj.push_data.id
+                )
+        except Exception:
+            pass
         return "-"
     push_data_link.short_description = "Push Cleansed Data"
 
 
 @admin.register(DupMember)
 class DupMemberAdmin(admin.ModelAdmin):
-    list_display = ("group", "bp_id", "score_total", "retain_candidate", "score_summary")
+    list_display = (
+        "group",
+        "bp_id",
+        "score_total",
+        "retain_candidate",
+        "score_summary",
+    )
     list_filter = ("retain_candidate", "group__id_type")
     search_fields = ("bp_id", "group__id_number", "group__id_type")
 
     def score_summary(self, obj):
-    data = {}
-
-    # replace score_breakdown with your actual field name if needed
-    raw = getattr(obj, "score_breakdown", None)
-
-    if isinstance(raw, dict):
-        data = raw
-    elif isinstance(raw, str) and raw.strip():
-        try:
-            data = json.loads(raw)
-        except Exception:
-            data = {}
-
-    ai = data.get("active_installation", data.get("active_inst", 0))
-    contract = data.get("contract_score", data.get("contract", 0))
-    movein = data.get("recent_movein", data.get("movein", 0))
-    oldest = data.get("oldest_bp_bonus", data.get("oldest_bp", 0))
-    profile = data.get("profile_completeness", data.get("profile", 0))
-    address = data.get("address_consistency", data.get("address", 0))
-    financial = data.get("financial_score", data.get("financial", 0))
-
-    return format_html(
-        "AI:{} | C:{} | M:{} | O:{} | P:{} | A:{} | F:{}",
-        ai, contract, movein, oldest, profile, address, financial
-    )
+        return _score_summary_html(obj)
+    score_summary.short_description = "Score Breakdown"
 
 
 @admin.action(description="Push selected records")
 def push_selected_records(modeladmin, request, queryset):
-    success_count = 0
-    error_count = 0
+    pushed = 0
+    failed = 0
 
     for obj in queryset:
         try:
             obj.status = "PUSHED"
             obj.save()
-            success_count += 1
+            pushed += 1
         except Exception:
             obj.status = "ERROR"
             obj.save()
-            error_count += 1
+            failed += 1
 
-    if error_count == 0:
-        modeladmin.message_user(request, f"{success_count} record(s) pushed successfully.", level=messages.SUCCESS)
+    if failed == 0:
+        modeladmin.message_user(
+            request,
+            f"{pushed} record(s) pushed successfully.",
+            level=messages.SUCCESS,
+        )
     else:
-        modeladmin.message_user(request, f"{success_count} pushed, {error_count} failed.", level=messages.WARNING)
+        modeladmin.message_user(
+            request,
+            f"{pushed} pushed, {failed} failed.",
+            level=messages.WARNING,
+        )
 
 
 @admin.register(PushCleansedData)
@@ -261,7 +297,7 @@ class PushCleansedDataAdmin(admin.ModelAdmin):
     def payload_pretty(self, obj):
         return format_html(
             "<pre style='white-space: pre-wrap; font-size:13px;'>{}</pre>",
-            json.dumps(obj.payload_json, indent=2)
+            json.dumps(obj.payload_json or {}, indent=2)
         )
     payload_pretty.short_description = "JSON Preview"
 
