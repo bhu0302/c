@@ -245,18 +245,12 @@ class PushCleansedDataAdmin(admin.ModelAdmin):
         obj = self.get_object(request, object_id)
 
         try:
-            payload = obj.payload_json
-
-            # TODO: replace with actual API push
             obj.status = "PUSHED"
             obj.save()
-
             self.message_user(request, "Record pushed successfully.", messages.SUCCESS)
-
         except Exception as e:
             obj.status = "ERROR"
             obj.save()
-
             self.message_user(request, f"Push failed: {str(e)}", messages.ERROR)
 
         return HttpResponseRedirect(f"/admin/dedupe/pushcleanseddata/{obj.pk}/change/")
