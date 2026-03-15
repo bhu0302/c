@@ -1,7 +1,32 @@
-import base64
-from io import BytesIO
-from django.contrib import admin
-from .models import DupGroup, DupMember
+from django.contrib import admin, messages
+from django.utils.html import format_html
+import json
+
+from .models import DupGroup, DupMember, PushCleansedData
+from .utils import build_push_json_for_dup_member
+
+
+@admin.action(description="Generate Push Cleansed Data JSON")
+def generate_push_json(modeladmin, request, queryset):
+    created_count = 0
+
+    for dup_member in queryset:
+        payload = build_push_json_for_dup_member(dup_member)
+
+        PushCleansedData.objects.create(
+            dup_member_id=dup_member.id,
+            retained_bp=payload.get("retained_bp", ""),
+            retained_account=payload.get("retained_account", ""),
+            payload_json=payload,
+            status="READY"
+        )
+        created_count += 1
+
+    modeladmin.message_user(
+        request,
+        f"{created_count} push payload(s) generated successfully.",
+        level=messages.SUCCESS
+    )
 
 
 @admin.register(DupGroup)
@@ -12,27 +37,32 @@ class DupGroupAdmin(admin.ModelAdmin):
 @admin.register(DupMember)
 class DupMemberAdmin(admin.ModelAdmin):
     list_display = ("group", "bp_id", "score_total", "retain_candidate")
+    actions = [generate_push_json]
 
-#    def _make_pie_chart_base64(self, obj):
-#         import matplotlib
-#         matplotlib.use("Agg")
-#         import matplotlib.pyplot as plt
 
-#         members = list(DupMember.objects.filter(group=obj.group).order_by("-score_total"))
-#         labels = [m.bp_id for m in members]
-#         scores = [float(m.score_total or 0) for m in members]
+@admin.register(PushCleansedData)
+class PushCleansedDataAdmin(admin.ModelAdmin):
+    list_display = (
+        "dup_member_id",
+        "retained_bp",
+        "retained_account",
+        "status",
+        "created_at",
+    )
+    readonly_fields = ("payload_pretty", "created_at")
+    fields = (
+        "dup_member_id",
+        "retained_bp",
+        "retained_account",
+        "status",
+        "payload_json",
+        "payload_pretty",
+        "created_at",
+    )
 
-#         if sum(scores) == 0:
-#             scores = [1.0 for _ in scores]
-
-#        explode = [0.12 if m.retain_candidate else 0.0 for m in members]
-
-#         fig = plt.figure(figsize=(6.5, 4.5))
-#         plt.pie(scores, labels=labels, autopct="%1.1f%%", explode=explode)
-
-#         buf = BytesIO()
-#         plt.savefig(buf, format="png", dpi=160, bbox_inches="tight")
-#         plt.close(fig)
-#         buf.seek(0)
-
-#         return base64.b64encode(buf.read()).decode("utf-8")
+    def payload_pretty(self, obj):
+        return format_html(
+            "<pre style='white-space: pre-wrap; font-size:13px;'>{}</pre>",
+            json.dumps(obj.payload_json, indent=2)
+        )
+    payload_pretty.short_description = "JSON Preview"
