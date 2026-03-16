@@ -12,15 +12,9 @@ import ast
 # ------------------------------------------------------------
 # Helpers
 # ------------------------------------------------------------
+
 def _read_score_data(obj):
-    """
-    Read score breakdown safely from DupMember.
-    Handles:
-    - dict
-    - JSON string
-    - Python-dict-like string
-    - fallback from individual numeric fields
-    """
+    # 1) Try common JSON/text fields
     possible_fields = [
         "score_breakdown",
         "score_details",
@@ -29,37 +23,29 @@ def _read_score_data(obj):
         "score_components",
         "breakdown",
         "component_scores",
+        "score_factors",
     ]
 
-    raw = None
     for field in possible_fields:
         if hasattr(obj, field):
-            value = getattr(obj, field, None)
-            if value not in (None, "", {}):
-                raw = value
-                break
+            raw = getattr(obj, field, None)
 
-    if isinstance(raw, dict):
-        return raw
+            if isinstance(raw, dict):
+                return raw
 
-    if isinstance(raw, str) and raw.strip():
-        # Try valid JSON first
-        try:
-            return json.loads(raw)
-        except Exception:
-            pass
+            if isinstance(raw, str) and raw.strip():
+                try:
+                    return json.loads(raw)
+                except Exception:
+                    try:
+                        parsed = ast.literal_eval(raw)
+                        if isinstance(parsed, dict):
+                            return parsed
+                    except Exception:
+                        pass
 
-        # Then try Python dict string like:
-        # "{'active_installation': 40, 'contract_score': 10}"
-        try:
-            parsed = ast.literal_eval(raw)
-            if isinstance(parsed, dict):
-                return parsed
-        except Exception:
-            pass
-
-    # Final fallback: build breakdown from separate fields if they exist
-    fallback = {
+    # 2) Try separate numeric columns directly on model
+    data = {
         "active_installation": getattr(obj, "active_installation", 0) or 0,
         "contract_score": getattr(obj, "contract_score", 0) or 0,
         "recent_movein": getattr(obj, "recent_movein", 0) or 0,
@@ -69,8 +55,8 @@ def _read_score_data(obj):
         "financial_score": getattr(obj, "financial_score", 0) or 0,
     }
 
-    if any(v != 0 for v in fallback.values()):
-        return fallback
+    if any(v != 0 for v in data.values()):
+        return data
 
     return {}
 
@@ -88,6 +74,7 @@ def _score_summary_html(obj):
         data.get("address_consistency", 0),
         data.get("financial_score", 0),
     )
+
 def _push_group_field_name():
     """
     Detect the FK / OneToOne field on PushCleansedData that points to DupGroup.
