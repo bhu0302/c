@@ -343,6 +343,7 @@ class PushCleansedDataAdmin(admin.ModelAdmin):
         return admin.site.index(request, extra_context=extra_context)
 
 from django.contrib import admin
+original_each_context = admin.site.each_context
 
 def custom_each_context(request):
     context = original_each_context(request)
