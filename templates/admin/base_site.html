@@ -1,0 +1,17 @@
+{% extends "admin/base_site.html" %}
+
+{% block branding %}
+<h1 id="site-name">
+    <a href="{% url 'admin:index' %}">Utility Portal Admin</a>
+</h1>
+{% endblock %}
+
+{% block nav-global %}
+<div style="margin: 10px 0;">
+    <a href="/dashboard/" target="_blank"
+       style="background:#0d6efd;color:white;padding:8px 14px;
+              text-decoration:none;border-radius:6px;font-weight:600;">
+        Dashboard
+    </a>
+</div>
+{% endblock %}
