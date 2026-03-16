@@ -8,7 +8,14 @@ from .models import DupGroup, DupMember, PushCleansedData
 from .utils import build_push_json_for_group
 
 
+# ------------------------------------------------------------
+# Helpers
+# ------------------------------------------------------------
 def _read_score_data(obj):
+    """
+    Safely read score breakdown from DupMember.
+    Change / extend the field list if your actual JSON field has another name.
+    """
     possible_fields = [
         "score_breakdown",
         "score_details",
@@ -51,6 +58,47 @@ def _score_summary_html(obj):
     )
 
 
+def _push_group_field_name():
+    """
+    Detect the FK / OneToOne field on PushCleansedData that points to DupGroup.
+    Works for names like: dup_group, group, dupgroup, etc.
+    """
+    preferred_names = ["dup_group", "group", "dupgroup", "dup_group_ref", "dup_group_fk"]
+
+    model_fields = {f.name: f for f in PushCleansedData._meta.get_fields() if hasattr(f, "related_model")}
+
+    for name in preferred_names:
+        f = model_fields.get(name)
+        if f and getattr(f, "related_model", None) == DupGroup:
+            return name
+
+    for f in PushCleansedData._meta.get_fields():
+        if getattr(f, "related_model", None) == DupGroup:
+            return f.name
+
+    return None
+
+
+def _push_group_lookup_kwargs(group_obj):
+    field_name = _push_group_field_name()
+    if not field_name:
+        raise ValueError("No FK/OneToOne field found on PushCleansedData pointing to DupGroup.")
+    return {field_name: group_obj}
+
+
+def _get_push_record_for_group(group_obj):
+    field_name = _push_group_field_name()
+    if not field_name:
+        return None
+    try:
+        return PushCleansedData.objects.filter(**{field_name: group_obj}).first()
+    except Exception:
+        return None
+
+
+# ------------------------------------------------------------
+# DupMember Inline
+# ------------------------------------------------------------
 class DupMemberInline(admin.TabularInline):
     model = DupMember
     extra = 0
@@ -77,6 +125,9 @@ class DupMemberInline(admin.TabularInline):
     score_summary.short_description = "Score Breakdown"
 
 
+# ------------------------------------------------------------
+# DupGroup actions
+# ------------------------------------------------------------
 @admin.action(description="Prepare Push Data for selected groups")
 def prepare_push_data(modeladmin, request, queryset):
     prepared = 0
@@ -86,8 +137,10 @@ def prepare_push_data(modeladmin, request, queryset):
         try:
             payload = build_push_json_for_group(group)
 
+            lookup = _push_group_lookup_kwargs(group)
+
             PushCleansedData.objects.update_or_create(
-                dup_group=group,
+                **lookup,
                 defaults={
                     "retained_bp": payload.get("retained_bp"),
                     "retained_account": payload.get("retained_account"),
@@ -99,18 +152,22 @@ def prepare_push_data(modeladmin, request, queryset):
 
         except Exception as e:
             failed += 1
-            PushCleansedData.objects.update_or_create(
-                dup_group=group,
-                defaults={
-                    "retained_bp": None,
-                    "retained_account": None,
-                    "payload_json": {
-                        "dup_group_id": group.id,
-                        "error": str(e),
+            try:
+                lookup = _push_group_lookup_kwargs(group)
+                PushCleansedData.objects.update_or_create(
+                    **lookup,
+                    defaults={
+                        "retained_bp": None,
+                        "retained_account": None,
+                        "payload_json": {
+                            "dup_group_id": getattr(group, "id", None),
+                            "error": str(e),
+                        },
+                        "status": "ERROR",
                     },
-                    "status": "ERROR",
-                },
-            )
+                )
+            except Exception:
+                pass
 
     if failed == 0:
         modeladmin.message_user(
@@ -134,9 +191,10 @@ def push_selected_groups(modeladmin, request, queryset):
     for group in queryset:
         try:
             payload = build_push_json_for_group(group)
+            lookup = _push_group_lookup_kwargs(group)
 
             obj, _ = PushCleansedData.objects.update_or_create(
-                dup_group=group,
+                **lookup,
                 defaults={
                     "retained_bp": payload.get("retained_bp"),
                     "retained_account": payload.get("retained_account"),
@@ -145,24 +203,29 @@ def push_selected_groups(modeladmin, request, queryset):
                 },
             )
 
+            # Placeholder for real push logic
             obj.status = "PUSHED"
             obj.save()
             pushed += 1
 
         except Exception as e:
             failed += 1
-            PushCleansedData.objects.update_or_create(
-                dup_group=group,
-                defaults={
-                    "retained_bp": None,
-                    "retained_account": None,
-                    "payload_json": {
-                        "dup_group_id": group.id,
-                        "error": str(e),
+            try:
+                lookup = _push_group_lookup_kwargs(group)
+                PushCleansedData.objects.update_or_create(
+                    **lookup,
+                    defaults={
+                        "retained_bp": None,
+                        "retained_account": None,
+                        "payload_json": {
+                            "dup_group_id": getattr(group, "id", None),
+                            "error": str(e),
+                        },
+                        "status": "ERROR",
                     },
-                    "status": "ERROR",
-                },
-            )
+                )
+            except Exception:
+                pass
 
     if failed == 0:
         modeladmin.message_user(
@@ -178,6 +241,9 @@ def push_selected_groups(modeladmin, request, queryset):
         )
 
 
+# ------------------------------------------------------------
+# DupGroup Admin
+# ------------------------------------------------------------
 @admin.register(DupGroup)
 class DupGroupAdmin(admin.ModelAdmin):
     list_display = (
@@ -188,23 +254,25 @@ class DupGroupAdmin(admin.ModelAdmin):
         "created_at",
         "push_data_link",
     )
+
     actions = [prepare_push_data, push_selected_groups]
     inlines = [DupMemberInline]
 
     def push_data_link(self, obj):
-        try:
-            if hasattr(obj, "push_data") and obj.push_data:
-                return format_html(
-                    '<a href="/admin/dedupe/pushcleanseddata/{}/change/">View Push Data</a>',
-                    obj.push_data.id,
-                )
-        except Exception:
-            pass
+        push_obj = _get_push_record_for_group(obj)
+        if push_obj:
+            return format_html(
+                '<a href="/admin/dedupe/pushcleanseddata/{}/change/">View Push Data</a>',
+                push_obj.pk,
+            )
         return "-"
 
     push_data_link.short_description = "Push Cleansed Data"
 
 
+# ------------------------------------------------------------
+# DupMember Admin
+# ------------------------------------------------------------
 @admin.register(DupMember)
 class DupMemberAdmin(admin.ModelAdmin):
     list_display = (
@@ -214,6 +282,7 @@ class DupMemberAdmin(admin.ModelAdmin):
         "retain_candidate",
         "score_summary",
     )
+
     list_filter = ("retain_candidate", "group__id_type")
     search_fields = ("bp_id", "group__id_number", "group__id_type")
 
@@ -223,6 +292,9 @@ class DupMemberAdmin(admin.ModelAdmin):
     score_summary.short_description = "Score Breakdown"
 
 
+# ------------------------------------------------------------
+# PushCleansedData actions
+# ------------------------------------------------------------
 @admin.action(description="Push selected records")
 def push_selected_records(modeladmin, request, queryset):
     pushed = 0
@@ -234,8 +306,11 @@ def push_selected_records(modeladmin, request, queryset):
             obj.save()
             pushed += 1
         except Exception:
-            obj.status = "ERROR"
-            obj.save()
+            try:
+                obj.status = "ERROR"
+                obj.save()
+            except Exception:
+                pass
             failed += 1
 
     if failed == 0:
@@ -252,27 +327,26 @@ def push_selected_records(modeladmin, request, queryset):
         )
 
 
+# ------------------------------------------------------------
+# PushCleansedData Admin
+# ------------------------------------------------------------
 @admin.register(PushCleansedData)
 class PushCleansedDataAdmin(admin.ModelAdmin):
     list_display = (
-        "dup_group",
+        "group_ref",
         "retained_bp",
         "retained_account",
         "status",
         "created_at",
         "push_now_button",
     )
+
     list_filter = ("status", "created_at")
-    search_fields = (
-        "retained_bp",
-        "retained_account",
-        "dup_group__id_number",
-        "dup_group__id_type",
-    )
+
     actions = [push_selected_records]
 
     readonly_fields = (
-        "dup_group",
+        "group_ref",
         "retained_bp",
         "retained_account",
         "payload_pretty",
@@ -281,7 +355,7 @@ class PushCleansedDataAdmin(admin.ModelAdmin):
     )
 
     fields = (
-        "dup_group",
+        "group_ref",
         "retained_bp",
         "retained_account",
         "status",
@@ -290,6 +364,21 @@ class PushCleansedDataAdmin(admin.ModelAdmin):
         "push_now_button",
         "created_at",
     )
+
+    def get_search_fields(self, request):
+        field_name = _push_group_field_name()
+        fields = ["retained_bp", "retained_account"]
+        if field_name:
+            fields.extend([f"{field_name}__id_number", f"{field_name}__id_type"])
+        return fields
+
+    def group_ref(self, obj):
+        field_name = _push_group_field_name()
+        if field_name and hasattr(obj, field_name):
+            return getattr(obj, field_name)
+        return "-"
+
+    group_ref.short_description = "Dup Group"
 
     def payload_pretty(self, obj):
         return format_html(
@@ -332,8 +421,11 @@ class PushCleansedDataAdmin(admin.ModelAdmin):
             obj.save()
             self.message_user(request, "Record pushed successfully.", messages.SUCCESS)
         except Exception as e:
-            obj.status = "ERROR"
-            obj.save()
+            try:
+                obj.status = "ERROR"
+                obj.save()
+            except Exception:
+                pass
             self.message_user(request, f"Push failed: {str(e)}", messages.ERROR)
 
         return HttpResponseRedirect(f"/admin/dedupe/pushcleanseddata/{obj.pk}/change/")
