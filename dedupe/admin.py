@@ -6,8 +6,7 @@ def build_push_message(group):
     if not group:
         return ""
 
-    # change "group_id" below later only if your FK field name is different
-    members = DupMember.objects.filter(group_id=group)
+    members = DupMember.objects.filter(group_id=group.id)
 
     retained_bp = ""
     unretained_bps = []
@@ -52,12 +51,9 @@ class DupMemberAdmin(admin.ModelAdmin):
 @admin.register(PushCleansedData)
 class PushCleansedDataAdmin(admin.ModelAdmin):
     list_display = ("id",)
-    readonly_fields = ("push_message", "created_at")
 
     def get_fields(self, request, obj=None):
         fields = []
-
-        # show the group selector only if this field exists in model
         model_field_names = [f.name for f in self.model._meta.fields]
 
         if "dup_group" in model_field_names:
@@ -67,12 +63,25 @@ class PushCleansedDataAdmin(admin.ModelAdmin):
         elif "group" in model_field_names:
             fields.append("group")
 
+        if "status" in model_field_names:
+            fields.append("status")
         if "push_message" in model_field_names:
             fields.append("push_message")
         if "created_at" in model_field_names:
             fields.append("created_at")
 
         return fields
+
+    def get_readonly_fields(self, request, obj=None):
+        readonly = []
+        model_field_names = [f.name for f in self.model._meta.fields]
+
+        if "push_message" in model_field_names:
+            readonly.append("push_message")
+        if "created_at" in model_field_names:
+            readonly.append("created_at")
+
+        return readonly
 
     def save_model(self, request, obj, form, change):
         group = None
