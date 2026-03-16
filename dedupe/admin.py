@@ -13,8 +13,29 @@ import ast
 # Helpers
 # ------------------------------------------------------------
 
+import json
+import ast
+from django.utils.html import format_html
+
+
+def _safe_num(v):
+    try:
+        if v in (None, ""):
+            return 0
+        return round(float(v), 2)
+    except Exception:
+        return 0
+
+
 def _read_score_data(obj):
-    # 1) Try common JSON/text fields
+    """
+    Read score breakdown from DupMember.
+    Supports:
+    - dict
+    - JSON string
+    - Python dict string
+    """
+
     possible_fields = [
         "score_breakdown",
         "score_details",
@@ -23,7 +44,7 @@ def _read_score_data(obj):
         "score_components",
         "breakdown",
         "component_scores",
-        "score_factors",
+        "score_data",
     ]
 
     for field in possible_fields:
@@ -35,28 +56,18 @@ def _read_score_data(obj):
 
             if isinstance(raw, str) and raw.strip():
                 try:
-                    return json.loads(raw)
+                    parsed = json.loads(raw)
+                    if isinstance(parsed, dict):
+                        return parsed
                 except Exception:
-                    try:
-                        parsed = ast.literal_eval(raw)
-                        if isinstance(parsed, dict):
-                            return parsed
-                    except Exception:
-                        pass
+                    pass
 
-    # 2) Try separate numeric columns directly on model
-    data = {
-        "active_installation": getattr(obj, "active_installation", 0) or 0,
-        "contract_score": getattr(obj, "contract_score", 0) or 0,
-        "recent_movein": getattr(obj, "recent_movein", 0) or 0,
-        "oldest_bp_bonus": getattr(obj, "oldest_bp_bonus", 0) or 0,
-        "profile_completeness": getattr(obj, "profile_completeness", 0) or 0,
-        "address_consistency": getattr(obj, "address_consistency", 0) or 0,
-        "financial_score": getattr(obj, "financial_score", 0) or 0,
-    }
-
-    if any(v != 0 for v in data.values()):
-        return data
+                try:
+                    parsed = ast.literal_eval(raw)
+                    if isinstance(parsed, dict):
+                        return parsed
+                except Exception:
+                    pass
 
     return {}
 
@@ -66,13 +77,13 @@ def _score_summary_html(obj):
 
     return format_html(
         "AI:{} | C:{} | M:{} | O:{} | P:{} | A:{} | F:{}",
-        data.get("active_installation", 0),
-        data.get("contract_score", 0),
-        data.get("recent_movein", 0),
-        data.get("oldest_bp_bonus", 0),
-        data.get("profile_completeness", 0),
-        data.get("address_consistency", 0),
-        data.get("financial_score", 0),
+        _safe_num(data.get("active_installation", 0)),
+        _safe_num(data.get("contract_score", 0)),
+        _safe_num(data.get("recent_movein", 0)),
+        _safe_num(data.get("oldest_bp_bonus", 0)),
+        _safe_num(data.get("profile_completeness", 0)),
+        _safe_num(data.get("address_consistency", 0)),
+        _safe_num(data.get("financial_score", 0)),
     )
 
 def _push_group_field_name():
