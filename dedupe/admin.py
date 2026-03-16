@@ -6,13 +6,9 @@ import json
 
 from .models import DupGroup, DupMember, PushCleansedData
 from .utils import build_push_json_for_group
-from django.contrib import admin
+
 
 def _read_score_data(obj):
-    """
-    Safely read score breakdown from DupMember.
-    Change the field list below if your actual score JSON field has another name.
-    """
     possible_fields = [
         "score_breakdown",
         "score_details",
@@ -77,6 +73,7 @@ class DupMemberInline(admin.TabularInline):
 
     def score_summary(self, obj):
         return _score_summary_html(obj)
+
     score_summary.short_description = "Score Breakdown"
 
 
@@ -96,7 +93,7 @@ def prepare_push_data(modeladmin, request, queryset):
                     "retained_account": payload.get("retained_account"),
                     "payload_json": payload,
                     "status": "READY",
-                }
+                },
             )
             prepared += 1
 
@@ -112,7 +109,7 @@ def prepare_push_data(modeladmin, request, queryset):
                         "error": str(e),
                     },
                     "status": "ERROR",
-                }
+                },
             )
 
     if failed == 0:
@@ -145,13 +142,11 @@ def push_selected_groups(modeladmin, request, queryset):
                     "retained_account": payload.get("retained_account"),
                     "payload_json": payload,
                     "status": "READY",
-                }
+                },
             )
 
-            # Replace this with real target push later
             obj.status = "PUSHED"
             obj.save()
-
             pushed += 1
 
         except Exception as e:
@@ -166,7 +161,7 @@ def push_selected_groups(modeladmin, request, queryset):
                         "error": str(e),
                     },
                     "status": "ERROR",
-                }
+                },
             )
 
     if failed == 0:
@@ -182,9 +177,7 @@ def push_selected_groups(modeladmin, request, queryset):
             level=messages.WARNING,
         )
 
-       
-        
-        
+
 @admin.register(DupGroup)
 class DupGroupAdmin(admin.ModelAdmin):
     list_display = (
@@ -203,11 +196,12 @@ class DupGroupAdmin(admin.ModelAdmin):
             if hasattr(obj, "push_data") and obj.push_data:
                 return format_html(
                     '<a href="/admin/dedupe/pushcleanseddata/{}/change/">View Push Data</a>',
-                    obj.push_data.id
+                    obj.push_data.id,
                 )
         except Exception:
             pass
         return "-"
+
     push_data_link.short_description = "Push Cleansed Data"
 
 
@@ -225,6 +219,7 @@ class DupMemberAdmin(admin.ModelAdmin):
 
     def score_summary(self, obj):
         return _score_summary_html(obj)
+
     score_summary.short_description = "Score Breakdown"
 
 
@@ -299,17 +294,19 @@ class PushCleansedDataAdmin(admin.ModelAdmin):
     def payload_pretty(self, obj):
         return format_html(
             "<pre style='white-space: pre-wrap; font-size:13px;'>{}</pre>",
-            json.dumps(obj.payload_json or {}, indent=2)
+            json.dumps(obj.payload_json or {}, indent=2),
         )
+
     payload_pretty.short_description = "JSON Preview"
 
     def push_now_button(self, obj):
         if obj.pk:
             return format_html(
                 '<a class="button" href="{}">Push Now</a>',
-                f"/admin/dedupe/pushcleanseddata/{obj.pk}/push/"
+                f"/admin/dedupe/pushcleanseddata/{obj.pk}/push/",
             )
         return "-"
+
     push_now_button.short_description = "Push Individual"
 
     def get_urls(self):
@@ -326,6 +323,10 @@ class PushCleansedDataAdmin(admin.ModelAdmin):
     def process_push(self, request, object_id, *args, **kwargs):
         obj = self.get_object(request, object_id)
 
+        if obj is None:
+            self.message_user(request, "Record not found.", messages.ERROR)
+            return HttpResponseRedirect("/admin/dedupe/pushcleanseddata/")
+
         try:
             obj.status = "PUSHED"
             obj.save()
@@ -336,18 +337,3 @@ class PushCleansedDataAdmin(admin.ModelAdmin):
             self.message_user(request, f"Push failed: {str(e)}", messages.ERROR)
 
         return HttpResponseRedirect(f"/admin/dedupe/pushcleanseddata/{obj.pk}/change/")
-    
-    def admin_index_with_dashboard(request, extra_context=None):
-        extra_context = extra_context or {}
-        extra_context["dashboard_url"] = "/dashboard/"
-        return admin.site.index(request, extra_context=extra_context)
-
-from django.contrib import admin
-original_each_context = admin.site.each_context
-
-def custom_each_context(request):
-    context = original_each_context(request)
-    context["dashboard_url"] = "/dashboard/"
-    return context
-
-admin.site.each_context = custom_each_context
