@@ -28,15 +28,8 @@ def _safe_num(v):
 
 
 def _read_score_data(obj):
-    """
-    Read score breakdown from DupMember.
-    Supports:
-    - dict
-    - JSON string
-    - Python dict string
-    """
-
     possible_fields = [
+        "score",              # <-- added first
         "score_breakdown",
         "score_details",
         "score_json",
