@@ -19,19 +19,16 @@ class DupMember(models.Model):
         related_name="members"
     )
     bp_id = models.CharField(max_length=50)
-
-    # useful source-system fields for payload generation
     installation = models.CharField(max_length=50, blank=True, null=True)
     contract_account = models.CharField(max_length=50, blank=True, null=True)
     contract = models.CharField(max_length=50, blank=True, null=True)
     account_class = models.CharField(max_length=50, blank=True, null=True)
-
     score_total = models.FloatField(default=0)
     retain_candidate = models.BooleanField(default=False)
     reasons_json = models.JSONField(null=True, blank=True)
 
     def __str__(self):
-        return f"BP {self.bp_id} (Group {self.group_id})"
+        return f"{self.bp_id} | Group {self.group_id}"
 
 
 class PushCleansedData(models.Model):
@@ -47,14 +44,11 @@ class PushCleansedData(models.Model):
         null=True,
         blank=True
     )
-
-    retained_bp = models.CharField(max_length=50)
+    retained_bp = models.CharField(max_length=50, blank=True, null=True)
     retained_account = models.CharField(max_length=50, blank=True, null=True)
-
     push_message = models.TextField(blank=True, null=True)
     pushed_at = models.DateTimeField(blank=True, null=True)
     updated_at = models.DateTimeField(auto_now=True)
-
     payload_json = models.JSONField(null=True, blank=True, default=dict)
 
     status = models.CharField(
@@ -67,8 +61,7 @@ class PushCleansedData(models.Model):
         ],
         default="DRAFT",
     )
-
     created_at = models.DateTimeField(default=timezone.now)
 
     def __str__(self):
-        return f"Push Payload - {self.retained_bp} - {self.status}"
+        return f"Push Payload - {self.retained_bp or 'No BP'} - {self.status}"
