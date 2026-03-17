@@ -195,7 +195,8 @@ class DupMemberAdmin(admin.ModelAdmin):
 class PushCleansedDataAdmin(admin.ModelAdmin):
     list_display = (
         "id",
-        "dup_member_id",
+        "dup_group",
+        "dup_member",
         "retained_bp",
         "retained_account",
         "status",
@@ -204,12 +205,19 @@ class PushCleansedDataAdmin(admin.ModelAdmin):
         "updated_at",
     )
 
-    search_fields = ("dup_member_id", "retained_bp", "retained_account", "status")
-    list_filter = ("status", "created_at", "updated_at")
+    list_filter = ("status", "dup_group__id_type", "created_at")
+    search_fields = (
+        "retained_bp",
+        "retained_account",
+        "dup_group__id_number",
+        "dup_member__bp_id",
+    )
+
     readonly_fields = ("created_at", "updated_at")
 
     fields = (
-        "dup_member_id",
+        "dup_group",
+        "dup_member",
         "retained_bp",
         "retained_account",
         "push_message",
@@ -228,43 +236,39 @@ class PushCleansedDataAdmin(admin.ModelAdmin):
             try:
                 retained_member = DupMember.objects.get(id=dup_member_id)
 
-                initial["dup_member_id"] = retained_member.id
+                initial["dup_group"] = retained_member.group
+                initial["dup_member"] = retained_member
                 initial["retained_bp"] = retained_member.bp_id
                 initial["retained_account"] = retained_member.contract_account
                 initial["push_message"] = build_push_message(retained_member)
                 initial["payload_json"] = build_payload_json(retained_member)
                 initial["status"] = "READY"
-
             except DupMember.DoesNotExist:
                 pass
 
         return initial
 
     def save_model(self, request, obj, form, change):
-        """
-        Auto-populate when saved from retained DupMember.
-        """
-        if obj.dup_member_id:
-            try:
-                retained_member = DupMember.objects.get(id=obj.dup_member_id)
+        if obj.dup_member:
+            retained_member = obj.dup_member
 
-                if not obj.retained_bp:
-                    obj.retained_bp = retained_member.bp_id
+            if not obj.dup_group:
+                obj.dup_group = retained_member.group
 
-                if not obj.retained_account:
-                    obj.retained_account = retained_member.contract_account
+            if not obj.retained_bp:
+                obj.retained_bp = retained_member.bp_id
 
-                if not obj.push_message:
-                    obj.push_message = build_push_message(retained_member)
+            if not obj.retained_account:
+                obj.retained_account = retained_member.contract_account
 
-                if not obj.payload_json:
-                    obj.payload_json = build_payload_json(retained_member)
+            if not obj.push_message:
+                obj.push_message = build_push_message(retained_member)
 
-                if obj.status == "DRAFT":
-                    obj.status = "READY"
+            if not obj.payload_json:
+                obj.payload_json = build_payload_json(retained_member)
 
-            except DupMember.DoesNotExist:
-                pass
+            if obj.status == "DRAFT":
+                obj.status = "READY"
 
         super().save_model(request, obj, form, change)
 

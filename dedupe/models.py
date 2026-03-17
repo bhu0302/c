@@ -35,8 +35,19 @@ class DupMember(models.Model):
 
 
 class PushCleansedData(models.Model):
-    # retained member reference stored as integer to stay compatible with your design
-    dup_member_id = models.IntegerField()
+    dup_group = models.ForeignKey(
+        DupGroup,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True
+    )
+    dup_member = models.ForeignKey(
+        DupMember,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True
+    )
+
     retained_bp = models.CharField(max_length=50)
     retained_account = models.CharField(max_length=50, blank=True, null=True)
 
@@ -60,4 +71,4 @@ class PushCleansedData(models.Model):
     created_at = models.DateTimeField(default=timezone.now)
 
     def __str__(self):
-        return f"Push Payload - DupMember {self.dup_member_id} - {self.status}"
+        return f"Push Payload - {self.retained_bp} - {self.status}"
