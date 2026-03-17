@@ -175,6 +175,7 @@ class PushCleansedDataAdmin(admin.ModelAdmin):
         "created_at",
         "updated_at",
     )
+
     readonly_fields = ("created_at", "updated_at")
 
     def get_changeform_initial_data(self, request):
