@@ -20,6 +20,9 @@ def build_push_message(retained_member):
         f"ID Type: {group.id_type}",
         f"ID Number: {group.id_number}",
         f"Retained BP: {retained_member.bp_id}",
+        f"Retained Installation: {retained_member.installation or '-'}",
+        f"Retained Contract Account: {retained_member.contract_account or '-'}",
+        f"Retained Contract: {retained_member.contract or '-'}",
         "",
         "Unretained BP actions:"
     ]
@@ -110,6 +113,7 @@ class DupMemberInline(admin.TabularInline):
         "installation",
         "contract_account",
         "contract",
+        "account_class",
         "score_total",
         "retain_candidate",
         "score_breakdown_display",
@@ -135,6 +139,7 @@ class DupMemberInline(admin.TabularInline):
 @admin.register(DupGroup)
 class DupGroupAdmin(admin.ModelAdmin):
     list_display = ("id", "id_type", "id_number", "dup_count", "created_at")
+    search_fields = ("id_type", "id_number")
     inlines = [DupMemberInline]
 
 
@@ -142,8 +147,10 @@ class DupGroupAdmin(admin.ModelAdmin):
 class DupMemberAdmin(admin.ModelAdmin):
     list_display = (
         "id", "group", "bp_id", "installation", "contract_account",
-        "contract", "score_total", "retain_candidate", "push_link"
+        "contract", "account_class", "score_total", "retain_candidate", "push_link"
     )
+    search_fields = ("bp_id", "installation", "contract_account", "contract")
+    list_filter = ("retain_candidate", "group__id_type")
 
     def push_link(self, obj):
         if obj and obj.retain_candidate:
@@ -200,6 +207,7 @@ class PushCleansedDataAdmin(admin.ModelAdmin):
     def save_model(self, request, obj, form, change):
         if obj.dup_member:
             retained_member = obj.dup_member
+
             if not obj.dup_group:
                 obj.dup_group = retained_member.group
             if not obj.retained_bp:
