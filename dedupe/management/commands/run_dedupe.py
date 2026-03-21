@@ -41,6 +41,17 @@ class Command(BaseCommand):
             oldest_date = members.aggregate(Min("bp_creation_date"))["bp_creation_date__min"]
             recent_movein = members.aggregate(Max("move_in_date"))["move_in_date__max"]
 
+            # address consistency for whole group
+            group_addresses = StgAddress.objects.filter(
+                bp_id__in=members.values_list("bp_id", flat=True)
+            )
+
+            addr_set = set(
+                (a.street, a.area, a.city, a.postal_code)
+                for a in group_addresses
+            )
+            address_consistency_score = 5 if len(addr_set) == 1 and len(addr_set) > 0 else 0
+
             scored_members = []
 
             for member in members:
@@ -57,7 +68,7 @@ class Command(BaseCommand):
                 else:
                     reasons["active_installation"] = 0
 
-                # 2) Active Contract (simplified)
+                # 2) Active Contract
                 contract_count = (
                     StgCustomerMaster.objects
                     .filter(bp_id=bp_id)
@@ -73,14 +84,14 @@ class Command(BaseCommand):
                 reasons["contract_score"] = contract_score
 
                 # 3) Most Recent Move-in
-                if member.move_in_date == recent_movein:
+                if member.move_in_date and member.move_in_date == recent_movein:
                     score += 15
                     reasons["recent_movein"] = 15
                 else:
                     reasons["recent_movein"] = 0
 
                 # 4) Oldest BP Creation
-                if member.bp_creation_date == oldest_date:
+                if member.bp_creation_date and member.bp_creation_date == oldest_date:
                     score += 10
                     reasons["oldest_bp_bonus"] = 10
                 else:
@@ -104,20 +115,8 @@ class Command(BaseCommand):
                     reasons["profile_completeness"] = completeness_score
 
                 # 6) Address Consistency
-                group_addresses = StgAddress.objects.filter(
-                    bp_id__in=members.values_list("bp_id", flat=True)
-                )
-
-                addr_set = set(
-                    (a.street, a.area, a.city, a.postal_code)
-                    for a in group_addresses
-                )
-
-                if len(addr_set) == 1 and len(addr_set) > 0:
-                    score += 5
-                    reasons["address_consistency"] = 5
-                else:
-                    reasons["address_consistency"] = 0
+                score += address_consistency_score
+                reasons["address_consistency"] = address_consistency_score
 
                 # 7) Weighted Financial Score
                 fin = StgFinancial.objects.filter(bp_id=bp_id).aggregate(
@@ -132,21 +131,22 @@ class Command(BaseCommand):
                 score += financial_score
                 reasons["financial_score"] = round(financial_score, 2)
 
-                # IMPORTANT:
-                # Save staging fields also, otherwise admin/push screens stay blank
+                # account_class is not a direct field in StgCustomerMaster
+                extra_attrs = member.extra_attributes or {}
+                account_class = extra_attrs.get("account_class") or extra_attrs.get("class")
+
                 scored_members.append({
                     "bp_id": bp_id,
-                    "installation": getattr(member, "installation", None),
-                    "contract_account": getattr(member, "contract_account", None),
-                    "contract": getattr(member, "contract", None),
-                    "account_class": getattr(member, "account_class", None),
+                    "installation": member.installation,
+                    "contract_account": member.contract_account,
+                    "contract": member.contract,
+                    "account_class": account_class,
                     "score": round(score, 2),
                     "reasons": reasons,
                 })
 
-            # Sort by highest score
+            # Highest score retained
             scored_members.sort(key=lambda x: x["score"], reverse=True)
-
             retained_bp = scored_members[0]["bp_id"]
 
             for item in scored_members:
