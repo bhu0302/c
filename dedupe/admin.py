@@ -17,12 +17,13 @@ def build_push_message(retained_member):
     members = DupMember.objects.filter(group=group)
 
     lines = [
-        f"ID Type: {group.id_type}",
-        f"ID Number: {group.id_number}",
-        f"Retained BP: {retained_member.bp_id}",
+        f"ID Type: {group.id_type or '-'}",
+        f"ID Number: {group.id_number or '-'}",
+        f"Retained BP: {retained_member.bp_id or '-'}",
         f"Retained Installation: {retained_member.installation or '-'}",
         f"Retained Contract Account: {retained_member.contract_account or '-'}",
         f"Retained Contract: {retained_member.contract or '-'}",
+        f"Retained Account Class: {retained_member.account_class or '-'}",
         "",
         "Unretained BP actions:"
     ]
@@ -34,10 +35,14 @@ def build_push_message(retained_member):
 
         found_unretained = True
         lines.append(
-            f"- DupMember {m.id} | BP {m.bp_id} | Installation {m.installation or '-'} | "
-            f"Old CA {m.contract_account or '-'} | Contract {m.contract or '-'} | "
-            f"Action: Move-out old BP, create new CA for retained BP, move-in retained BP, "
-            f"merge to retained BP {retained_member.bp_id}"
+            f"- DupMember {m.id} | "
+            f"BP {m.bp_id or '-'} | "
+            f"Installation {m.installation or '-'} | "
+            f"Old CA {m.contract_account or '-'} | "
+            f"Contract {m.contract or '-'} | "
+            f"Account Class {m.account_class or '-'} | "
+            f"Action: Move-out old BP, create new CA for retained BP, "
+            f"move-in retained BP, merge to retained BP {retained_member.bp_id or '-'}"
         )
 
     if not found_unretained:
@@ -123,6 +128,7 @@ class DupMemberInline(admin.TabularInline):
 
     def score_breakdown_display(self, obj):
         return format_reasons(obj.reasons_json) if obj else "-"
+    score_breakdown_display.short_description = "Score Breakdown"
 
     def add_push_link(self, obj):
         if obj and obj.retain_candidate:
@@ -131,8 +137,6 @@ class DupMemberInline(admin.TabularInline):
                 obj.id
             )
         return "-"
-
-    score_breakdown_display.short_description = "Score Breakdown"
     add_push_link.short_description = "Push"
 
 
@@ -146,11 +150,25 @@ class DupGroupAdmin(admin.ModelAdmin):
 @admin.register(DupMember)
 class DupMemberAdmin(admin.ModelAdmin):
     list_display = (
-        "id", "group", "bp_id", "installation", "contract_account",
-        "contract", "account_class", "score_total", "retain_candidate", "push_link"
+        "id",
+        "group",
+        "bp_id",
+        "installation",
+        "contract_account",
+        "contract",
+        "account_class",
+        "score_total",
+        "retain_candidate",
+        "score_breakdown_display",
+        "push_link",
     )
-    search_fields = ("bp_id", "installation", "contract_account", "contract")
-    list_filter = ("retain_candidate", "group__id_type")
+    search_fields = ("bp_id", "installation", "contract_account", "contract", "account_class")
+    list_filter = ("retain_candidate", "group__id_type", "account_class")
+    readonly_fields = ("score_breakdown_display",)
+
+    def score_breakdown_display(self, obj):
+        return format_reasons(obj.reasons_json) if obj else "-"
+    score_breakdown_display.short_description = "Score Breakdown"
 
     def push_link(self, obj):
         if obj and obj.retain_candidate:
@@ -159,15 +177,19 @@ class DupMemberAdmin(admin.ModelAdmin):
                 obj.id
             )
         return "-"
-
     push_link.short_description = "Push"
 
 
 @admin.register(PushCleansedData)
 class PushCleansedDataAdmin(admin.ModelAdmin):
     list_display = (
-        "id", "dup_group", "dup_member", "retained_bp",
-        "retained_account", "status", "created_at"
+        "id",
+        "dup_group",
+        "dup_member",
+        "retained_bp",
+        "retained_account",
+        "status",
+        "created_at",
     )
 
     fields = (
@@ -183,7 +205,14 @@ class PushCleansedDataAdmin(admin.ModelAdmin):
         "updated_at",
     )
 
-    readonly_fields = ("created_at", "updated_at")
+    readonly_fields = (
+        "retained_bp",
+        "retained_account",
+        "push_message",
+        "payload_json",
+        "created_at",
+        "updated_at",
+    )
 
     def get_changeform_initial_data(self, request):
         initial = super().get_changeform_initial_data(request)
@@ -205,19 +234,23 @@ class PushCleansedDataAdmin(admin.ModelAdmin):
         return initial
 
     def save_model(self, request, obj, form, change):
+        retained_member = None
+
         if obj.dup_member:
             retained_member = obj.dup_member
+        elif obj.dup_group:
+            retained_member = DupMember.objects.filter(
+                group=obj.dup_group,
+                retain_candidate=True
+            ).first()
 
-            if not obj.dup_group:
-                obj.dup_group = retained_member.group
-            if not obj.retained_bp:
-                obj.retained_bp = retained_member.bp_id
-            if not obj.retained_account:
-                obj.retained_account = retained_member.contract_account
-            if not obj.push_message:
-                obj.push_message = build_push_message(retained_member)
-            if not obj.payload_json:
-                obj.payload_json = build_payload_json(retained_member)
+        if retained_member:
+            obj.dup_group = retained_member.group
+            obj.dup_member = retained_member
+            obj.retained_bp = retained_member.bp_id
+            obj.retained_account = retained_member.contract_account
+            obj.push_message = build_push_message(retained_member)
+            obj.payload_json = build_payload_json(retained_member)
             if obj.status == "DRAFT":
                 obj.status = "READY"
 
