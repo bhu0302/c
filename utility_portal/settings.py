@@ -41,7 +41,7 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     'ingestion',
-    'dedupe',
+    "dedupe.apps.DedupeConfig",
     'merge',
     'portal',
 ]
