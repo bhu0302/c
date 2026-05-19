@@ -64,24 +64,24 @@ class Command(BaseCommand):
                 active_install = member.move_out_date is None
                 if active_install:
                     score += 40
-                    reasons["active_installation"] = 40
+                    reasons["active_installation"] = 50
                 else:
                     reasons["active_installation"] = 0
 
                 # 2) Active Contract
-                contract_count = (
-                    StgCustomerMaster.objects
-                    .filter(bp_id=bp_id)
-                    .exclude(contract__isnull=True)
-                    .exclude(contract__exact="")
-                    .values("contract")
-                    .distinct()
-                    .count()
-                )
+                #  contract_count = (
+                 #     StgCustomerMaster.objects
+                 #     .filter(bp_id=bp_id)
+                #      .exclude(contract__isnull=True)
+               #       .exclude(contract__exact="")
+               #       .values("contract")
+              #        .distinct()
+              #        .count()
+             #     )
 
-                contract_score = contract_count * 10
-                score += contract_score
-                reasons["contract_score"] = contract_score
+             #     contract_score = contract_count * 10
+             #     score += contract_score
+              #    reasons["contract_score"] = contract_score
 
                 # 3) Most Recent Move-in
                 if member.move_in_date and member.move_in_date == recent_movein:
