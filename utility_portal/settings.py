@@ -41,7 +41,11 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     'ingestion',
+<<<<<<< HEAD
     "dedupe.apps.DedupeConfig",
+=======
+    'dedupe.apps.DedupeConfig',
+>>>>>>> 0657261 (Rename Dedupe admin label to Data Analysis)
     'merge',
     'portal',
 ]
