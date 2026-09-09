@@ -78,3 +78,55 @@ def dashboard_view(request):
         # your existing dashboard context here
     }
     return render(request, "dashboard.html", context)
+
+@staff_member_required
+def dashboard_view(request):
+    context = {
+        # your existing dashboard context here
+    }
+    return render(request, "dashboard.html", context)
+
+
+# ==================================================
+# REFRESH DEDUPLICATION
+# ==================================================
+
+
+from django.contrib.admin.views.decorators import staff_member_required
+from django.contrib import messages
+from django.core.management import call_command
+from django.shortcuts import redirect
+
+
+@staff_member_required
+def dashboard_view(request):
+    context = {
+        # your existing dashboard context here
+    }
+    return render(request, "dashboard.html", context)
+
+
+# ==================================================
+# REFRESH DEDUPLICATION
+# ==================================================
+
+@staff_member_required
+def refresh_dedup(request):
+
+    if request.method == "POST":
+        try:
+            call_command("run_dedupe")
+
+            messages.success(
+                request,
+                "Deduplication refreshed successfully using latest uploaded data."
+            )
+
+        except Exception as e:
+            messages.error(
+                request,
+                f"Deduplication refresh failed: {str(e)}"
+            )
+
+    return redirect("duplicate_groups")
+

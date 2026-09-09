@@ -12,4 +12,5 @@ urlpatterns = [
     path("dashboard/groups/<int:group_id>/", views.group_detail, name="group_detail"),
     path("admin/", admin.site.urls),
     path("dashboard/", dashboard_view, name="dashboard"),
+    path("dashboard/refresh-dedup/", views.refresh_dedup, name="refresh_dedup"),
 ]
