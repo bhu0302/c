@@ -3,7 +3,7 @@ from django.shortcuts import render, get_object_or_404
 
 from ingestion.models import StgCustomerMaster
 from .models import DupGroup, DupMember
-
+from dedupe.services.external_push import push_to_external_system
 
 def dashboard_home(request):
     total_bps = StgCustomerMaster.objects.values("bp_id").distinct().count()
@@ -129,4 +129,3 @@ def refresh_dedup(request):
             )
 
     return redirect("duplicate_groups")
-
