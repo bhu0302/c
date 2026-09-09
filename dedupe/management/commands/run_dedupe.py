@@ -1,4 +1,3 @@
-
 from django.core.management.base import BaseCommand
 from django.db import transaction
 from django.db.models import Count, Sum, Max, Min
@@ -19,21 +18,21 @@ class Command(BaseCommand):
     def handle(self, *args, **kwargs):
 
         self.stdout.write(
-            "🔄 Running Enterprise Business Scoring..."
+            "Running Enterprise Business Scoring..."
         )
 
-        # ---------------------------------------------------------
+        # =========================================================
         # Rebuild deduplication result using latest staging data
-        # ---------------------------------------------------------
+        # =========================================================
         with transaction.atomic():
 
             DupMember.objects.all().delete()
             DupGroup.objects.all().delete()
 
-            # -----------------------------------------------------
+            # =====================================================
             # Identify duplicate identity groups
             # Same ID Type + ID Number with more than one BP
-            # -----------------------------------------------------
+            # =====================================================
             duplicate_groups = (
                 StgCustomerMaster.objects
                 .exclude(id_type__isnull=True)
@@ -58,13 +57,16 @@ class Command(BaseCommand):
             total_groups = 0
             total_members = 0
 
+            # =====================================================
+            # Process each duplicate identity group
+            # =====================================================
             for group in duplicate_groups:
 
                 id_type = group["id_type"]
                 id_number = group["id_number"]
 
                 # -------------------------------------------------
-                # Get all records belonging to this identity
+                # Get customer records belonging to this identity
                 # -------------------------------------------------
                 members = (
                     StgCustomerMaster.objects
@@ -77,7 +79,7 @@ class Command(BaseCommand):
                 )
 
                 # -------------------------------------------------
-                # Distinct BP IDs in the duplicate group
+                # Distinct BP IDs
                 # -------------------------------------------------
                 bp_ids = list(
                     members
@@ -102,20 +104,23 @@ class Command(BaseCommand):
 
                 total_groups += 1
 
-                # -------------------------------------------------
-                # Group-level dates
-                # -------------------------------------------------
+                # =================================================
+                # GROUP LEVEL INFORMATION
+                # =================================================
+
+                # Oldest BP creation date in this DU group
                 oldest_date = members.aggregate(
                     Min("bp_creation_date")
                 )["bp_creation_date__min"]
 
+                # Most recent move-in date in this DU group
                 recent_movein = members.aggregate(
                     Max("move_in_date")
                 )["move_in_date__max"]
 
-                # -------------------------------------------------
-                # Address consistency for complete duplicate group
-                # -------------------------------------------------
+                # =================================================
+                # ADDRESS CONSISTENCY
+                # =================================================
                 group_addresses = StgAddress.objects.filter(
                     bp_id__in=bp_ids
                 )
@@ -141,17 +146,17 @@ class Command(BaseCommand):
                     and len(addr_set) > 0
                 )
 
+                # =================================================
+                # SCORE EACH BP
+                # =================================================
                 scored_members = []
 
-                # -------------------------------------------------
-                # Score one time per BP
-                # -------------------------------------------------
                 for bp_id in bp_ids:
 
-                    # -------------------------------------------------
-                    # A BP may have multiple customer-master rows.
-                    # Prefer active/latest record for display fields.
-                    # -------------------------------------------------
+                    # ---------------------------------------------
+                    # A BP can have multiple customer-master rows.
+                    # Prefer active/latest row for display fields.
+                    # ---------------------------------------------
                     bp_records = (
                         members
                         .filter(bp_id=bp_id)
@@ -171,22 +176,33 @@ class Command(BaseCommand):
                     score = 0
                     reasons = {}
 
-                    # =================================================
+                    # =============================================
                     # 1. ACTIVE INSTALLATION
-                    # =================================================
+                    # MAXIMUM = 30
+                    # =============================================
                     active_install = bp_records.filter(
                         move_out_date__isnull=True
                     ).exists()
 
                     if active_install:
-                        score += 40
-                        reasons["active_installation"] = 40
+                        active_score = 30
                     else:
-                        reasons["active_installation"] = 0
+                        active_score = 0
 
-                    # =================================================
-                    # 2. ACTIVE / DISTINCT CONTRACT SCORE
-                    # =================================================
+                    score += active_score
+
+                    reasons[
+                        "active_installation"
+                    ] = active_score
+
+                    # =============================================
+                    # 2. DISTINCT CONTRACT SCORE
+                    # MAXIMUM = 20
+                    #
+                    # 0 contracts = 0
+                    # 1 contract  = 10
+                    # 2+         = 20
+                    # =============================================
                     contract_count = (
                         StgCustomerMaster.objects
                         .filter(bp_id=bp_id)
@@ -197,54 +213,81 @@ class Command(BaseCommand):
                         .count()
                     )
 
-                    contract_score = contract_count * 10
+                    contract_score = min(
+                        contract_count * 10,
+                        20
+                    )
 
                     score += contract_score
 
-                    reasons["contract_score"] = contract_score
-                    reasons["contract_count"] = contract_count
+                    reasons[
+                        "contract_score"
+                    ] = contract_score
 
-                    # =================================================
+                    reasons[
+                        "contract_count"
+                    ] = contract_count
+
+                    # =============================================
                     # 3. MOST RECENT MOVE-IN
-                    # =================================================
-                    bp_recent_movein = bp_records.aggregate(
-                        Max("move_in_date")
-                    )["move_in_date__max"]
+                    # MAXIMUM = 15
+                    # =============================================
+                    bp_recent_movein = (
+                        bp_records.aggregate(
+                            Max("move_in_date")
+                        )["move_in_date__max"]
+                    )
 
                     if (
                         recent_movein is not None
                         and
                         bp_recent_movein == recent_movein
                     ):
-
-                        score += 15
-                        reasons["recent_movein"] = 15
-
+                        recent_score = 15
                     else:
-                        reasons["recent_movein"] = 0
+                        recent_score = 0
 
-                    # =================================================
+                    score += recent_score
+
+                    reasons[
+                        "recent_movein"
+                    ] = recent_score
+
+                    # =============================================
                     # 4. OLDEST BP CREATION DATE
-                    # =================================================
-                    bp_oldest_date = bp_records.aggregate(
-                        Min("bp_creation_date")
-                    )["bp_creation_date__min"]
+                    # MAXIMUM = 10
+                    # =============================================
+                    bp_oldest_date = (
+                        bp_records.aggregate(
+                            Min("bp_creation_date")
+                        )["bp_creation_date__min"]
+                    )
 
                     if (
                         oldest_date is not None
                         and
                         bp_oldest_date == oldest_date
                     ):
-
-                        score += 10
-                        reasons["oldest_bp_bonus"] = 10
-
+                        oldest_score = 10
                     else:
-                        reasons["oldest_bp_bonus"] = 0
+                        oldest_score = 0
 
-                    # =================================================
+                    score += oldest_score
+
+                    reasons[
+                        "oldest_bp_bonus"
+                    ] = oldest_score
+
+                    # =============================================
                     # 5. PROFILE COMPLETENESS
-                    # =================================================
+                    # MAXIMUM = 10
+                    #
+                    # Email       = 2
+                    # Mobile      = 2
+                    # DOB         = 2
+                    # Nationality = 2
+                    # Gender      = 2
+                    # =============================================
                     completeness_fields = [
                         member.email,
                         member.mobile_number,
@@ -259,40 +302,47 @@ class Command(BaseCommand):
                         if value
                     )
 
-                    completeness_score = available_fields * 2
+                    completeness_score = min(
+                        available_fields * 2,
+                        10
+                    )
 
-                    if completeness_score >= 8:
+                    score += completeness_score
 
-                        score += 10
-                        reasons["profile_completeness"] = 10
+                    reasons[
+                        "profile_completeness"
+                    ] = completeness_score
 
-                    else:
+                    reasons[
+                        "profile_fields_available"
+                    ] = available_fields
 
-                        score += completeness_score
-                        reasons[
-                            "profile_completeness"
-                        ] = completeness_score
-
-                    # =================================================
+                    # =============================================
                     # 6. ADDRESS CONSISTENCY
-                    # =================================================
+                    # MAXIMUM = 5
+                    # =============================================
                     if address_consistent:
-
-                        score += 5
-                        reasons["address_consistency"] = 5
-
+                        address_score = 5
                     else:
+                        address_score = 0
 
-                        reasons["address_consistency"] = 0
+                    score += address_score
 
-                    # =================================================
-                    # 7. WEIGHTED FINANCIAL SCORE
-                    # =================================================
+                    reasons[
+                        "address_consistency"
+                    ] = address_score
+
+                    # =============================================
+                    # 7. FINANCIAL ACTIVITY
+                    # MAXIMUM = 10
+                    # =============================================
                     fin = (
                         StgFinancial.objects
                         .filter(bp_id=bp_id)
                         .aggregate(
-                            total=Sum("payment_amount"),
+                            total=Sum(
+                                "payment_amount"
+                            ),
                             count=Count("id")
                         )
                     )
@@ -305,43 +355,84 @@ class Command(BaseCommand):
                         fin["count"] or 0
                     )
 
-                    financial_score = (
+                    # ---------------------------------------------
+                    # Raw financial activity
+                    #
+                    # Payment value contribution:
+                    # total_payment * 0.001
+                    #
+                    # Payment frequency contribution:
+                    # payment_count * 2
+                    # ---------------------------------------------
+                    financial_raw_score = (
                         total_payment * 0.001
                     ) + (
                         payment_count * 2
                     )
 
+                    # Financial contribution cannot exceed 10
+                    financial_score = min(
+                        financial_raw_score,
+                        10
+                    )
+
                     score += financial_score
 
-                    reasons["financial_score"] = round(
+                    reasons[
+                        "financial_score"
+                    ] = round(
                         financial_score,
                         2
                     )
 
-                    reasons["total_payment"] = round(
+                    reasons[
+                        "financial_raw_score"
+                    ] = round(
+                        financial_raw_score,
+                        2
+                    )
+
+                    reasons[
+                        "total_payment"
+                    ] = round(
                         total_payment,
                         2
                     )
 
-                    reasons["payment_count"] = payment_count
+                    reasons[
+                        "payment_count"
+                    ] = payment_count
 
-                    # =================================================
-                    # Keep member record so important SAP fields can
-                    # be transferred into DupMember
-                    # =================================================
+                    # =============================================
+                    # FINAL SAFETY CAP
+                    # TOTAL SCORE MAXIMUM = 100
+                    # =============================================
+                    score = min(
+                        score,
+                        100
+                    )
+
+                    # =============================================
+                    # STORE BP SCORING RESULT
+                    # =============================================
                     scored_members.append({
                         "member": member,
                         "bp_id": bp_id,
-                        "score": round(score, 2),
+                        "score": round(
+                            score,
+                            2
+                        ),
                         "reasons": reasons,
                     })
 
-                # -------------------------------------------------
-                # Highest score first
+                # =================================================
+                # SORT BPs BY SCORE
                 #
-                # Tie breaker:
-                # BP ID used for deterministic selection
-                # -------------------------------------------------
+                # Highest score first.
+                #
+                # If scores are equal:
+                # BP ID provides deterministic tie-breaking.
+                # =================================================
                 scored_members.sort(
                     key=lambda x: (
                         -x["score"],
@@ -353,11 +444,14 @@ class Command(BaseCommand):
                     dup_group.delete()
                     continue
 
-                retained_bp = scored_members[0]["bp_id"]
+                # Highest scoring BP is retained
+                retained_bp = (
+                    scored_members[0]["bp_id"]
+                )
 
-                # -------------------------------------------------
-                # Create DupMember records
-                # -------------------------------------------------
+                # =================================================
+                # CREATE DUP MEMBER RECORDS
+                # =================================================
                 for result in scored_members:
 
                     member = result["member"]
@@ -370,13 +464,17 @@ class Command(BaseCommand):
 
                         bp_id=bp_id,
 
-                        installation=member.installation,
+                        installation=(
+                            member.installation
+                        ),
 
-                        contract_account=member.contract_account,
+                        contract_account=(
+                            member.contract_account
+                        ),
 
                         contract=member.contract,
 
-                         account_class=None,
+                        account_class=None,
 
                         score_total=score,
 
@@ -389,11 +487,13 @@ class Command(BaseCommand):
 
                     total_members += 1
 
+        # =========================================================
+        # COMPLETION MESSAGE
+        # =========================================================
         self.stdout.write(
             self.style.SUCCESS(
-                f"✅ Enterprise Scoring Completed | "
+                f"Enterprise Scoring Completed | "
                 f"Duplicate Groups: {total_groups} | "
                 f"Duplicate BPs: {total_members}"
             )
         )
-
