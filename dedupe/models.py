@@ -34,13 +34,13 @@ class DupMember(models.Model):
 class PushCleansedData(models.Model):
     dup_group = models.ForeignKey(
         DupGroup,
-        on_delete=models.CASCADE,
+        on_delete=models.SET_NULL,
         null=True,
         blank=True
     )
     dup_member = models.ForeignKey(
         DupMember,
-        on_delete=models.CASCADE,
+        on_delete=models.SET_NULL,
         null=True,
         blank=True
     )
