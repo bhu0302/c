@@ -4,4 +4,4 @@ whitenoise
 dj-database-url
 psycopg2-binary
 matplotlib
-numpy
+numpyrequests==2.32.5
