@@ -22,7 +22,7 @@ def home(request):
 admin.site.site_header = "Utility Data Cleansing Portal"
 admin.site.site_title = "Utility Admin"
 admin.site.index_title = "Welcome to Bhushan's Utility BP Merge System"
-
+admin.site.index_template = "admin/custom_index.html"
 
 # -------------------------------------------------
 # URL Configuration
@@ -40,5 +40,6 @@ urlpatterns = [
 
     # BP Duplicate Detection / Cleansing
     path("", include("dedupe.urls")),
+    path("profiling/", include("profiling.urls"))
 
 ]

@@ -1,0 +1,27 @@
+{% extends "admin/index.html" %}
+
+{% block content %}
+
+<div style="
+    margin-bottom: 25px;
+    padding: 20px;
+    border: 1px solid #dcdcdc;
+    border-radius: 6px;
+">
+
+    <h2>Data Profiling</h2>
+
+    <p>
+        Analyze Email, Mobile and Address data quality.
+    </p>
+
+    <a href="{% url 'profiling:dashboard' %}"
+       class="button">
+        Open Data Profiling Dashboard
+    </a>
+
+</div>
+
+{{ block.super }}
+
+{% endblock %}

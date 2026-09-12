@@ -24,10 +24,13 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 
 # SECURITY WARNING: keep the secret key used in production secret!
 #SECRET_KEY = 'django-insecure-p1hszp^#y7ora3rt)$8*m2^g@540zt&j24_#8=5(s9!1ej#phr'
-SECRET_KEY = os.environ.get("SECRET_KEY")
+SECRET_KEY = os.environ.get(
+    "SECRET_KEY",
+    "django-insecure-local-development-key"
+)
 # SECURITY WARNING: don't run with debug turned on in production!
 
-DEBUG = os.environ.get("DEBUG", "False").lower() == "true"
+DEBUG = True
 
 ALLOWED_HOSTS = ["*"]
 
@@ -45,6 +48,7 @@ INSTALLED_APPS = [
     "dedupe.apps.DedupeConfig",
     'merge',
     'portal',
+    'profiling',
 ]
 
 MIDDLEWARE = [
